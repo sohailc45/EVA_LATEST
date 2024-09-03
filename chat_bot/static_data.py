@@ -1,15 +1,12 @@
-
-from chromadb.config import Settings
-from chromadb.utils import embedding_functions
+ 
+import chromadb
 from langchain_community.embeddings import HuggingFaceEmbeddings
-import sentence_transformers
 from langchain_community.vectorstores import Chroma
-
 
 persist_directory =  'chroma_db_files/'
 # Create or get the collection
-collection_name = "practice_info"
-
+collection_name = "practice_info2"
+ 
 emb_model = "sentence-transformers/paraphrase-MiniLM-L3-v2"
 embeddings = HuggingFaceEmbeddings(model_name=emb_model)
 # Practice information as key-value pairs
@@ -40,8 +37,8 @@ practice_info = {
     "Early Arrival": "No",
     "Wait List": "Yes, but there is no guarantee if you get an appointment or not."
 }
-
-practice_info1={
+ 
+practice_info2={
   "Practice Name": "First Insight Vision",
   "Practice Hours": "9 AM to 4 PM PST",
   "Practice Email": "eyecare@gmail.com",
@@ -107,11 +104,11 @@ practice_info1={
   "Early Arrival": "No",
   "Wait List": "No"
 }
-
-def vectorDB(subject, practice_info):
+ 
+def vectorDB(subject, practice_info2):
     db = Chroma.from_texts(
         collection_name=f"{subject}",
-        texts=[f"{key}: {value}" for key, value in practice_info.items()],
+        texts=[f"{key}: {value}" for key, value in practice_info2.items()],
         embedding=embeddings,
         persist_directory=persist_directory
     )
@@ -126,13 +123,13 @@ def connect_to_vectorDB(subject):
         return vector_db
     except Exception as e:
         print(f"Error occurred: {e}")
-def save_practise_to_vectorDB(subject="practice_info"):
-    vector_db = vectorDB(subject, practice_info)
+def save_practise_to_vectorDB(subject="practice_info2"):
+    vector_db = vectorDB(subject, practice_info2)
     if vector_db:
         print("Practice information added successfully.")
-
-
-def query_chroma_and_generate_response(query, subject="practice_info"):
+ 
+ 
+def query_chroma_and_generate_response(query, subject="practice_info2"):
     vector_db = connect_to_vectorDB(subject)
     if vector_db:
         results = vector_db.similarity_search(query, k=1)
@@ -140,18 +137,17 @@ def query_chroma_and_generate_response(query, subject="practice_info"):
             return results[0]
         else:
             return "Sorry, I couldn't find an answer to your question."
-        
-
+       
+ 
 # save_practise_to_vectorDB()
-
+ 
 # # Example question
 # user_question = "What are the practice hours?"
-
+ 
 # # Query ChromaDB and get the response
 # response = query_chroma_and_generate_response(user_question)
-
+ 
 # print("ResponsexsnjfhniEABHWnJ:", response)
-
-
-
-
+ 
+ 
+ 

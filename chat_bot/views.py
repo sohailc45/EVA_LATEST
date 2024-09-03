@@ -223,6 +223,33 @@ def query_chroma_and_generate_response(query):
         return "Failed to connect to the vector database."
 query_chroma_and_generate_response.return_direct=True
 
+
+@tool
+def query_chroma_and_generate_response_2nd(query):
+    """give answer to organisation related query like address or any other relevant information related to organisation """
+    print(query,"vvzsjjjjjjjjjzkj")
+ 
+    subject="practice_info2"
+    print("regsnj",query)
+    vector_db = connect_to_vectorDB(subject)
+    if vector_db:
+        # Perform a similarity search on the vector database
+        results = vector_db.similarity_search(query, k=100)  # Fetch multiple relevant documents
+       
+        if results:
+            # Combine content from all retrieved documents
+            combined_content = "\n".join([result.page_content for result in results])
+            print("rgsnkvmk",combined_content)
+            # Use LLM to generate a response based on the combined content
+            response = identify_intent_practice_question(query, combined_content)
+            return response
+        else:
+            return "Sorry, I couldn't find an answer to your question."
+    else:
+        return "Failed to connect to the vector database."
+query_chroma_and_generate_response_2nd.return_direct=True
+
+
 @tool
 def get_greeting_response(user_input):
     """Respond to the user's greeting.
@@ -598,7 +625,7 @@ def confirmation_intent(context):
                 identify what user wants fro user query querry 
                 Instructuion:
                 - If the user wants to change some thing return change
-                - If the user is verifying the information ase correct return correcrt  
+                - If the user is verifying the information are correct return correcrt  
                 - If user intents to say the informatin is wrong  return incorrect.
                
                 please follow the above instructions carefully.
@@ -614,7 +641,7 @@ def confirmation_intent(context):
     
 
  
-tools=[query_chroma_and_generate_response,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+tools=[query_chroma_and_generate_response,query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
 memory = ConversationBufferMemory(memory_key="chat_history")
 
 # define the agent
@@ -632,8 +659,12 @@ state = {
 }
 
 
-def verify_tools(request):
+def verify_tools(request,practice):
+    
+
     tools=[query_chroma_and_generate_response,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+    if practice=='practice2':
+        tools=[query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
     data = json.loads(request.body.decode('utf-8'))
     session_id = data.get('session_id', '')
     data=UserProfile.objects.filter(session_id=session_id).first()
@@ -642,6 +673,8 @@ def verify_tools(request):
             pass      
         else:
             tools=[query_chroma_and_generate_response,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]   
+            if practice=='practice2':
+                tools=[query_chroma_and_generate_response_2nd,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
     except:
         pass
     return tools
@@ -649,14 +682,14 @@ def verify_tools(request):
     
 
 
-def handle_user_input(request,user_input,history):
+def handle_user_input(request,user_input,history,practice):
     global state
     data = json.loads(request.body.decode('utf-8'))
     user_input = data.get('input', '')
     session_id = data.get('session_id', '')
     if request.session[f"step{session_id}"] == "start":
         if user_input:
-            tools=verify_tools(request)
+            tools=verify_tools(request,practice)
             chat_history = ChatHistory.objects.filter(session_id=session_id).order_by('timestamp')
             # Format chat history for response
             formatted_input = "User:"
@@ -1069,9 +1102,11 @@ def get_chat_history( session_id):
 def home(request):
     request.session[f'session_id1'] = str(uuid.uuid4())
     session_id=request.session[f'session_id1'] 
-   
-
     return render(request, "home.html",{'session_id':session_id})
+def home2(request):
+    request.session[f'session_id1'] = str(uuid.uuid4())
+    session_id=request.session[f'session_id1'] 
+    return render(request, "home2.html",{'session_id':session_id})
 
 @csrf_exempt
 def chatbot_view(request):
@@ -1079,6 +1114,7 @@ def chatbot_view(request):
         data = json.loads(request.body.decode('utf-8'))
         user_input = data.get('input', '')
         session_id = data.get('session_id', '')
+        practice = data.get('practice', '')
         try:
             print('trying')
             request.session[f"step{session_id}"]
@@ -1090,7 +1126,7 @@ def chatbot_view(request):
         
         print(user_input,'history')
 
-        response=handle_user_input(request,user_input,history)
+        response=handle_user_input(request,user_input,history,practice)
         ChatHistory.objects.create(
             session_id=session_id,
             user_input=user_input,
