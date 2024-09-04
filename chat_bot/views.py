@@ -56,7 +56,7 @@ prompt = PromptTemplate(
   
       Action: the action to take, should be one of [{tool_names}]
   
-      Action Input: the users's input to the action.
+      Action Input: input to the action.
   
       Observation: Observe the result of the action.
       output : Observation.
@@ -942,7 +942,7 @@ def handle_user_input(request,user_input,history,practice):
             user_data = UserProfile.objects.filter(session_id=session_id).first()
             print("fdvbkxnarmzdf",user_data)
             result = agent_executor.invoke({
-                "input": f" Send OTP to FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
+                "input": f" Send OTP to  FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
                 "tools": [sndotp],
                 "tool_names": "sndotp",
                 "tool_description": sndotp.description,
