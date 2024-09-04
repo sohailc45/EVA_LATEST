@@ -11,15 +11,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain import hub
 from langchain.agents import AgentExecutor,  create_react_agent
 from langchain.prompts import PromptTemplate
-from langchain_groq import ChatGroq
+# from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferMemory
-# from langchain.core.messages import HumanMessage, AIMessage
-# from . model_loader import *
+
 from langchain_community.llms import HuggingFaceTextGenInference
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import time
 from langchain_community.llms import HuggingFaceEndpoint
-# Define your custom prompt template
+
 from chat_bot.models import UserProfile,ChatHistory
 import uuid
 from chat_bot.static_data import *
