@@ -56,7 +56,7 @@ prompt = PromptTemplate(
   
       Action: the action to take, should be one of [{tool_names}]
   
-      Action Input: input to the action.
+      Action Input: input to the action as a dictionary.
   
       Observation: Observe the result of the action.
       output : Observation.
@@ -612,8 +612,30 @@ def sndotp(data):
     """to send the otp for confirmation"""
     token=get_auth_token()
     print(data)
-    data=data.replace("\'", "\"")
+    # data=data.replace("\'", "\"")
+    # data = json.loads(data)
+    # if isinstance(data, str):
+        # if True:
+            # Attempt to parse as JSON
     data = json.loads(data)
+        # else json.JSONDecodeError:
+            # If JSON parsing fails, assume it is in key-value pair format
+            # try:
+            #     # Split the string into key-value pairs
+            #     data = data.split(', ')
+            #     data_dict = {}
+            #     for item in data:
+            #         key, value = item.split('=')
+            #         data_dict[key.strip()] = value.strip()
+ 
+            #     # Use the converted dictionary
+            #     data = data_dict
+            # except ValueError:
+            #     return "Invalid data format. Could not convert to dictionary."
+ 
+    # Ensure data is a dictionary
+    if not isinstance(data, dict):
+        return "Invalid data format. Data must be a dictionary or correctly formatted string."
     FirstName = data.get("FirstName")
     LastName = data.get("LastName")
     PhoneNumber = data.get("PhoneNumber")
@@ -638,7 +660,7 @@ def sndotp(data):
     if otp_response.status_code != 200:
         return f"Failed to send OTP. Status code: {otp_response.status_code}"
 sndotp.return_direct=True
-
+ 
 
 @tool
 def book_appointment(data):
@@ -839,7 +861,11 @@ def handle_user_input(request,user_input,history,practice):
             Tools_names=", ".join([t.name for t in tools])
             tool_description=", ".join([t.description for t in tools])
             tool_args=", ".join([str(t.args) for t in tools])
-            result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
+            try:
+                result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
+            except:
+                result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
+
             print(result)
             try:
                 data = json.loads(request.body.decode('utf-8'))
@@ -941,14 +967,25 @@ def handle_user_input(request,user_input,history,practice):
         if user_input.lower() == "yes":
             user_data = UserProfile.objects.filter(session_id=session_id).first()
             print("fdvbkxnarmzdf",user_data)
-            result = agent_executor.invoke({
-                "input": f" Send OTP to  FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
-                "tools": [sndotp],
-                "tool_names": "sndotp",
-                "tool_description": sndotp.description,
-                "tool_args": json.dumps({"FirstName": user_data.FirstName,"LastName": user_data.LastName,"PhoneNumber": user_data.PhoneNumber,"DOB": user_data.DateOfBirth,"Email": user_data.Email}),                
-                "agent_scratchpad": " "
-                })
+            try:
+                result = agent_executor.invoke({
+                    "input": f" Send OTP to  FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
+                    "tools": [sndotp],
+                    "tool_names": "sndotp",
+                    "tool_description": sndotp.description,
+                    "tool_args": json.dumps({"FirstName": user_data.FirstName,"LastName": user_data.LastName,"PhoneNumber": user_data.PhoneNumber,"DOB": user_data.DateOfBirth,"Email": user_data.Email}),                
+                    "agent_scratchpad": " "
+                    })
+            except:
+                result = agent_executor.invoke({
+                    "input": f" Send OTP to  FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
+                    "tools": [sndotp],
+                    "tool_names": "sndotp",
+                    "tool_description": sndotp.description,
+                    "tool_args": json.dumps({"FirstName": user_data.FirstName,"LastName": user_data.LastName,"PhoneNumber": user_data.PhoneNumber,"DOB": user_data.DateOfBirth,"Email": user_data.Email}),                
+                    "agent_scratchpad": " "
+                    })
+
             request.session[f"step{session_id}"] = "otp_verification"
             result="An OTP has been sent to your registered Mobile No. or Email. <br> Please enter the OTP to proceed."
             result=transform_input(result)
@@ -1230,10 +1267,13 @@ def handle_user_input(request,user_input,history,practice):
                     "tool_args": json.dumps({"location_id": location_id, "provider_id": provider_id, "reason_id": appointment_reason_id, "open_slot_id": open_slot_id,'FirstName' :first_name,'LastName' :last_name,'DOB' :DOB,'preferred_date_time': preferred_date_time,'PhoneNumber' :PhoneNumber,'Email':Email}),
                     "agent_scratchpad": history
                 })
-               
+                
                 booking_response = booking_result['output']
                 del request.session[f"step{session_id}"]
-                chat_history.objects.filter(session_id=session_id).delete()
+                data=ChatHistory.objects.filter(session_id=session_id)
+                data.delete()
+                data=UserProfile.objects.filter(session_id=session_id)
+                data.delete()
                 # request.session[f"step{session_id}"] = "start"
                 # request.session[f"location_selected{session_id}"] = None
                 # request.session[f"provider_selected{session_id}"] = None
@@ -1263,6 +1303,10 @@ def home(request):
     request.session[f'session_id1'] = str(uuid.uuid4())
     session_id=request.session[f'session_id1'] 
     return render(request, "home.html",{'session_id':session_id})
+def home_dynamic(request):
+    request.session[f'session_id1'] = str(uuid.uuid4())
+    session_id=request.session[f'session_id1'] 
+    return render(request, "home_dynamic.html",{'session_id':session_id})
 def home2(request):
     request.session[f'session_id1'] = str(uuid.uuid4())
     session_id=request.session[f'session_id1'] 
@@ -1286,9 +1330,9 @@ def chatbot_view(request):
         
         print(user_input,'history')
 
-        if True:
+        try:
             response=handle_user_input(request,user_input,history,practice)
-        else:
+        except:
             response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
         if response=='Agent stopped due to iteration limit or time limit.':
             
