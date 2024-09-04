@@ -37,6 +37,8 @@ prompt = PromptTemplate(
       if user ask query related to appointment with greeting like hi..then donot go to greeting response.you have to go fetch info tool for book appointment
       IF user ask any static informationn like office addres ,timing or related to  organisation then donot use fetch info
       read the instruction carefully and follow the steps.
+      understand the chat history and see what user wants to do and make the action input accordingly.
+      try 1 iteration only and if result is not found return this text ```Please clarify your query so I can assist you better.```
     
       Chat_history: {agent_scratchpad}
       
@@ -54,7 +56,7 @@ prompt = PromptTemplate(
   
       Action: the action to take, should be one of [{tool_names}]
   
-      Action Input: the input to the action.
+      Action Input: the users's input to the action.
   
       Observation: Observe the result of the action.
       output : Observation.
@@ -162,7 +164,7 @@ def transform_input(input_text):
     """
      
     # Call the API using the latest method
-    response = call_huggingface_endpoint(modelPromptTotransform, api_url,256 ,False  ,0.9 ,0.9)
+    response = call_huggingface_endpoint(modelPromptTotransform, api_url,256 ,False  ,0.09 ,0.9)
     # response = query_llama3(modelPromptTotransform)
     # print(response,'transformed response-----')
     response = response[len(modelPromptTotransform):].strip()
@@ -196,11 +198,26 @@ def identify_intent_practice_question(user_query,data):
     response=response[len(model_prompt_for_static_queries):].strip()
     return response
  
- 
+
+@tool
+def short_queries(query):
+    """ use this tool when users query is verry short and does not explain what does it means,
+        mostly for short user queries like if user types a date only or user query is very short.
+        Do not use this if query has some meaning like prefred date is this or something like that. 
+        This will return text saying Please clarify your query so I can assist you better.
+     """
+    results= f'Please clarify your query so I can assist you better. i could not understand what this means : {query}'
+    results=transform_input(results)
+    
+    return 'Please clarify your query so I can assist you better.'
+short_queries.return_direct=True
+
 
 @tool
 def query_chroma_and_generate_response(query):
-    """give answer to organisation related query like address or any other relevant information related to organisation """
+    """give answer to organisation related query like address or any other relevant information related to organisation 
+       Do not use this if user is sharing some details about them or details related to appointment like dates name phone no or email etc.
+    """
     print(query,"vvzsjjjjjjjjjzkj")
  
     subject="practice_info"
@@ -226,7 +243,9 @@ query_chroma_and_generate_response.return_direct=True
 
 @tool
 def query_chroma_and_generate_response_2nd(query):
-    """give answer to organisation related query like address or any other relevant information related to organisation """
+    """give answer to organisation related query like address or any other relevant information related to organisation 
+       Do not use this if user is sharing some details about them or details related to appointment like dates name phone no or email etc.
+    """
     print(query,"vvzsjjjjjjjjjzkj")
  
     subject="practice_info2"
@@ -308,14 +327,19 @@ def fetch_info(response):
     modelPromptForAppointment = f"""
         <|begin_of_text|><|start_header_id|>system<|end_header_id|>
         text: {response}
+        
         Extract the following information from given text : FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime  if available ,determine what could be the information
         and if any fields in the information is not there return it as ```empty``` .
         instruction:
+        -here PreferredDateOrTime field is the date the user wants to book the appoinmnet on. 
         -Do not add any things if not present in the given text, leave it empty.
         -Read the full information carefully.
         -Always Provide proper indexing for each extracted field at the begining.
-        -Understand the user input carefully and extract anything  you can for these fields (FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime).
+        -Understand the user input carefully and extract anything you can for these fields (FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime) from the user querry.
         -Do not change email and Phone no if they are incorrect Keep them as it is.
+        -please extract that name whose appointment to be booked as parents can book the appointment of child so extract child name not parents names if condition arises
+        -understand user query carefully and 
+ 
         <|eot_id|>
         <|start_header_id|>user<|end_header_id|>
 
@@ -348,10 +372,64 @@ def fetch_info(response):
 fetch_info.return_direct=True
 
 
+@tool
+def fetch_info_to_change(response):
+    
+    """this tool will analyse what user want to change and  extract the users information like FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime from the given users input it can extract all at once or one at a time  """
+    print(response,'action_input is ')
+
+    
+    
+    modelPromptForAppointment = f"""
+        <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+        text: {response}
+        Analyse what user want to change and Extract any or all of the following information from given text : FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime  if available ,determine what could be the information
+        and if any fields in the information is not there return it as ```empty``` .
+        instruction:
+        -Do not add any things if not present in the given text, leave it empty.
+        -Read the text carefully and extract filds that can be extracted from the given text.
+        -Always Provide proper indexing for each extracted field at the begining.
+        -Understand the user input carefully and extract anything you can for these fields (FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime) from the user querry.
+        -Do not change email and Phone no if they are incorrect Keep them as it is.
+        
+ 
+        <|eot_id|>
+        <|start_header_id|>user<|end_header_id|>
+            { {response}}
+        <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+        """
+    try:
+        result = call_huggingface_endpoint(modelPromptForAppointment, api_url,256 ,False  ,0.1 ,0.9)
+        result=result[len(modelPromptForAppointment):].strip().replace('*','').replace('Not available','').replace('not available','').replace('(Not available)','').replace('(empty field)','').replace('not Available','').replace('(not available)','').replace('Not mentioned','').replace('Not Mentioned','').replace('()','').replace('empty','').replace('None','')
+        print('fetched info srting',result)
+        data_dict = {}
+        for line in result.split('\n'):
+            if ':' in line:
+                pattern = r"(\d*\.)?\s*([a-zA-Z\s]+):\s*(.+)"
+                matches = re.findall(pattern, line)
+                if matches:
+                    
+                    key, value = matches[0][1].strip(), matches[0][2].strip()
+                    # if key.lower()=='preferreddateortime' or key.lower()=='dateofbirth':
+                    #     value=format_appointment_date(value)
+
+                    data_dict[key] = (value).replace('(empty field)','').replace('not Available','').replace('(not available)','').replace('Not mentioned','').replace('Not Mentioned','').replace('()','').replace('empty','').replace('None','')
+ 
+        print('data string',data_dict)
+        extracted_info= data_dict
+        
+        return data_dict
+    except Exception as e:
+        print(f"Error extracting information: {e}")
+        return {}
+fetch_info_to_change.return_direct=True
+
 
 @tool
 def generate_response(user_query):
-    """if user ask anything other then the appointment or max eyr care and  if the users input is not related to booking appointment or eyecare """
+    """ if user ask anything other then the appointment or max eyr care and  if the users input is not related to booking appointment or eyecare. 
+        Do not use this if user is sharing some details about them or details related to appointment like dates name phone no or email etc.  
+    """
     prompt = (
     f"""<|begin_of_text|><|start_header_id|>system<|end_header_id|>
     instruction: You are a creative assistant for eye care services. You must ONLY provide information directly related to eye health, vision, and eye care services. If the user's query is not related to eye care, respond with EXACTLY this message: 'I apologize, but I can only answer questions related to eye care. If you have any eye-related questions, I'd be happy to help'
@@ -643,11 +721,11 @@ def confirmation_intent(context):
     
 
  
-tools=[query_chroma_and_generate_response,query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+tools=[fetch_info_to_change,query_chroma_and_generate_response,query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
 memory = ConversationBufferMemory(memory_key="chat_history")
 
 # define the agent
-agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation"])
+agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation","short_queries is not a valid tool"])
 agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools,verbose=True, handle_parsing_errors=True,max_iterations=6)
 
 state = {
@@ -721,9 +799,9 @@ def validate_date(session_id,preferred_date_time,DOB):
 def verify_tools(request,practice):
     
 
-    tools=[query_chroma_and_generate_response,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+    tools=[query_chroma_and_generate_response,fetch_info,get_greeting_response,generate_response]
     if practice=='practice2':
-        tools=[query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+        tools=[query_chroma_and_generate_response_2nd,fetch_info,get_greeting_response,generate_response]
     data = json.loads(request.body.decode('utf-8'))
     session_id = data.get('session_id', '')
     data=UserProfile.objects.filter(session_id=session_id).first()
@@ -731,9 +809,9 @@ def verify_tools(request,practice):
         if data.FirstName=='na' or data.LastName=='na' or data.DateOfBirth=='na' or data.Email=='na' or data.PhoneNumber=='na'  or data.PreferredDateOrTime=='na':
             pass      
         else:
-            tools=[query_chroma_and_generate_response,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]   
+            tools=[query_chroma_and_generate_response,get_greeting_response,generate_response]   
             if practice=='practice2':
-                tools=[query_chroma_and_generate_response_2nd,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+                tools=[query_chroma_and_generate_response_2nd,get_greeting_response,generate_response]
     except:
         pass
     return tools
@@ -763,7 +841,7 @@ def handle_user_input(request,user_input,history,practice):
             tool_args=", ".join([str(t.args) for t in tools])
             result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
             print(result)
-            if True:
+            try:
                 data = json.loads(request.body.decode('utf-8'))
                 user_input = data.get('input', '')
                 session_id = data.get('session_id', '')
@@ -806,7 +884,7 @@ def handle_user_input(request,user_input,history,practice):
                         missing_fields_.append(field)
                 missing_fields=missing_fields_
                 if missing_fields:
-                    result = f" Please provide your {', '.join(missing_fields)}: "
+                    result = f" Please provide these missing fields {', '.join(missing_fields)}: "
                     print('missing_fields+++')
                     result=transform_input(result)
                     return result
@@ -839,7 +917,7 @@ def handle_user_input(request,user_input,history,practice):
                     )
                     request.session[f"step{session_id}"] = "confirmation"
                     return confirmation_message
-            else:
+            except:
                 
                 return result["output"]
  
@@ -904,11 +982,11 @@ def handle_user_input(request,user_input,history,practice):
             else:    
                 result = agent_executor.invoke({
                     "input": user_input,
-                    "tools": [fetch_info],
-                    "tool_names": "fetch_info",
-                    "tool_description": fetch_info.description,
+                    "tools": [fetch_info_to_change],
+                    "tool_names": "fetch_info_to_change",
+                    "tool_description": fetch_info_to_change.description,
                     "tool_args": json.dumps(user_input),
-                    "agent_scratchpad": history
+                    "agent_scratchpad": ""
                 })
                 data = json.loads(request.body.decode('utf-8'))
                 session_id = data.get('session_id', '')
@@ -918,15 +996,18 @@ def handle_user_input(request,user_input,history,practice):
                 fields = ['FirstName', 'LastName', 'DateOfBirth', 'PhoneNumber', 'Email', 'PreferredDateOrTime']
                     
                 for key, value in result_.items():
-                    print(key,type(key),value,type(value),'Key value')
-                    user_data = UserProfile.objects.filter(session_id=session_id)
-                    if value == '':
-                        continue
-                    if user_data.exists():
-                        UserProfile.objects.filter(session_id=session_id).update(**{key:value})
-                    else:
-                        user_data=UserProfile.objects.create(session_id=session_id)
-                        UserProfile.objects.filter(session_id=session_id).update(**{key:value})
+                    try:
+                        print(key,type(key),value,type(value),'Key value')
+                        user_data = UserProfile.objects.filter(session_id=session_id)
+                        if value == '':
+                            continue
+                        if user_data.exists():
+                            UserProfile.objects.filter(session_id=session_id).update(**{key:value})
+                        else:
+                            user_data=UserProfile.objects.create(session_id=session_id)
+                            UserProfile.objects.filter(session_id=session_id).update(**{key:value})
+                    except:
+                        pass
                 request.session[f"step{session_id}"] = "input_new_value"
                 return handle_user_input(request,user_input,history,practice)
             
@@ -1020,14 +1101,14 @@ def handle_user_input(request,user_input,history,practice):
 
             # Use regex to find all occurrences of "ID: <number>"
             ids = re.findall(r'ID:\s*(\d+)', text)
-
+            ids=[x.strip() for x in ids]
             # Convert the extracted IDs to integers
             ids = list(map(int, ids))
         
             if location_id in ids:
                 request.session[f"location_selected{session_id}"] = location_id
                 result = agent_executor.invoke({
-                    "input": f"Get Providers for location_id :{location_id}",
+                    "input": f"Get Providers for location_id is {location_id}",
                     "tools": [get_providers],
                     "tool_names": "get_providers",
                     "tool_description": get_providers.description,
@@ -1049,10 +1130,10 @@ def handle_user_input(request,user_input,history,practice):
                 print(json_output,"fewjwij")
                 return providers
             else:
-                return "Invalid providers ID. Please enter a prociders ID from the list provided."
+                return "Invalid Location ID. Please enter a Location ID from the list provided."
        
         except ValueError:
-            return "Invalid input. 1111Please enter a numerical ID from the list provided."
+            return "Invalid input. Please enter a numerical ID from the list provided."
  
  
     elif request.session[f"step{session_id}"] == "provider_selection":
@@ -1063,7 +1144,8 @@ def handle_user_input(request,user_input,history,practice):
 
             # Use regex to find all occurrences of "ID: <number>"
             ids = re.findall(r'ID:\s*(\d+)', text)
-
+            
+            ids=[x.strip() for x in ids]
             # Convert the extracted IDs to integers
             ids = list(map(int, ids))
  
@@ -1072,7 +1154,7 @@ def handle_user_input(request,user_input,history,practice):
                 location_id = request.session[f"location_selected{session_id}"]
                 print("dtrgdt",location_id)
                 result = agent_executor.invoke({
-                    "input": f"Get Appointment Reasons when selected location_id :{location_id} and  selected provider_id :{provider_id} ",
+                    "input": f"Get Appointment Reasons when selected location_id is {location_id} and  selected provider_id is {provider_id} ",
                     "tools": [get_appointment_reasons],
                     "tool_names": "get_appointment_reasons ",
                     "tool_description": get_appointment_reasons.description,
@@ -1104,7 +1186,7 @@ def handle_user_input(request,user_input,history,practice):
             user_data = UserProfile.objects.filter(session_id=session_id).first()
             preferred_date_time=user_data.PreferredDateOrTime
             result = agent_executor.invoke({
-                "input": f"Get open slots for  preferred_date_time: {preferred_date_time} ,location_id: {location_id}, provider_id : {provider_id}, reason_id :{appointment_reason_id}",
+                "input": f"Get open slots for  preferred_date_time is {preferred_date_time} ,location_id is {location_id}, provider_id  is {provider_id}, reason_id  is {appointment_reason_id}",
                 "tools": [get_open_slots],
                 "tool_names": "get_open_slots",
                 "tool_description": get_open_slots.description,
@@ -1141,7 +1223,7 @@ def handle_user_input(request,user_input,history,practice):
                 booking_response=''
                 # Use the tool to book the appointment
                 booking_result = agent_executor.invoke({
-                    "input": f"Book Appointment with location_id: {location_id}, provider_id: {provider_id}, reason_id: {appointment_reason_id}, and open_slot_id {open_slot_id} ,FirstName {first_name},LastName {last_name},DOB {DOB},preferred_date_time {preferred_date_time},PhoneNumber {PhoneNumber},Email{Email}",
+                    "input": f"Book Appointment with location_id is {location_id}, provider_id is {provider_id}, reason_id is{appointment_reason_id}, and open_slot_id is {open_slot_id} ,FirstName is {first_name},LastName is {last_name},DOB  is {DOB},preferred_date_time is {preferred_date_time},PhoneNumber is {PhoneNumber},Email is {Email}",
                     "tools": [book_appointment],
                     "tool_names": "book_appointment",
                     "tool_description": book_appointment.description,
@@ -1151,6 +1233,7 @@ def handle_user_input(request,user_input,history,practice):
                
                 booking_response = booking_result['output']
                 del request.session[f"step{session_id}"]
+                chat_history.objects.filter(session_id=session_id).delete()
                 # request.session[f"step{session_id}"] = "start"
                 # request.session[f"location_selected{session_id}"] = None
                 # request.session[f"provider_selected{session_id}"] = None
@@ -1203,7 +1286,14 @@ def chatbot_view(request):
         
         print(user_input,'history')
 
-        response=handle_user_input(request,user_input,history,practice)
+        if True:
+            response=handle_user_input(request,user_input,history,practice)
+        else:
+            response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
+        if response=='Agent stopped due to iteration limit or time limit.':
+            
+            response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
+
         ChatHistory.objects.create(
             session_id=session_id,
             user_input=user_input,
