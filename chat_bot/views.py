@@ -314,8 +314,8 @@ def fetch_info(response):
         -Do not add any things if not present in the given text, leave it empty.
         -Read the full information carefully.
         -Always Provide proper indexing for each extracted field at the begining.
-        -Understand the user input carefully and extract anything you can for these fields (FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime).
-        
+        -Understand the user input carefully and extract anything  you can for these fields (FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime).
+        -Do not change email and Phone no if they are incorrect Keep them as it is.
         <|eot_id|>
         <|start_header_id|>user<|end_header_id|>
 
@@ -323,7 +323,7 @@ def fetch_info(response):
         """
     try:
         result = call_huggingface_endpoint(modelPromptForAppointment, api_url,256 ,False  ,0.1 ,0.9)
-        result=result[len(modelPromptForAppointment):].strip().replace('*','').replace('Not available','').replace('not available','').replace('(Not available)','')
+        result=result[len(modelPromptForAppointment):].strip().replace('*','').replace('Not available','').replace('not available','').replace('(Not available)','').replace('(empty field)','').replace('not Available','').replace('(not available)','').replace('Not mentioned','').replace('Not Mentioned','').replace('()','').replace('empty','').replace('None','')
         print('fetched info srting',result)
         data_dict = {}
         for line in result.split('\n'):
@@ -331,14 +331,16 @@ def fetch_info(response):
                 pattern = r"(\d*\.)?\s*([a-zA-Z\s]+):\s*(.+)"
                 matches = re.findall(pattern, line)
                 if matches:
+                    
                     key, value = matches[0][1].strip(), matches[0][2].strip()
+                    # if key.lower()=='preferreddateortime' or key.lower()=='dateofbirth':
+                    #     value=format_appointment_date(value)
+
                     data_dict[key] = (value).replace('(empty field)','').replace('not Available','').replace('(not available)','').replace('Not mentioned','').replace('Not Mentioned','').replace('()','').replace('empty','').replace('None','')
  
         print('data string',data_dict)
         extracted_info= data_dict
-        for key in extracted_info:
-            UserProfile.objects.filter(session_id='')
-
+        
         return data_dict
     except Exception as e:
         print(f"Error extracting information: {e}")
@@ -659,6 +661,63 @@ state = {
 }
 
 
+
+# funtion to validate email
+def validate_email(email):
+          # Regular expression pattern for a valid email address
+          pattern = r'^[\w\.-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}$'
+          return re.match(pattern, email) is not None
+
+# funtion to validate email         
+def validate_phone(phone):
+    # Regular expression pattern for a valid US phone number
+    pattern = r'^\d{10}$|^\(\d{3}\) \d{3}-\d{4}$|^\(\d{3}\)-\d{3}-\d{4}$'
+    return re.match(pattern, phone) is not None
+
+
+def validate_date(session_id,preferred_date_time,DOB):
+    print(preferred_date_time,DOB,'preferred_date_time,DOB')
+
+    preferred_date_time=format_appointment_date(preferred_date_time)
+
+    DOB=format_appointment_date(DOB)
+    print(preferred_date_time,DOB,'preferred_date_time,DOB,1111111')
+    UserProfile.objects.filter(session_id=session_id).update(PreferredDateOrTime=preferred_date_time ,DateOfBirth=DOB )
+    current_date = datetime.now()
+    preferred_date_time = datetime.strptime(preferred_date_time.strip(), '%m/%d/%Y')
+    DOB = datetime.strptime(DOB.strip(), '%m/%d/%Y')
+    print(current_date,preferred_date_time,DOB,type(preferred_date_time),(DOB))
+    
+    # Initialize validity flags
+    preferred_valid = 'valid'
+    dob_valid = 'valid'
+    
+    # Validate preferred_date_time
+    if preferred_date_time < current_date:
+        preferred_valid = 'not valid'
+    
+    # Validate DOB
+    if DOB > current_date:
+        dob_valid = 'not valid'
+    
+    # Return results based on the validity of both dates
+    if preferred_valid == 'not valid' and dob_valid == 'not valid':
+        text = "remove the date of birth and preferred date and time fro appointment from the context"
+        UserProfile.objects.filter(session_id=session_id).update(PreferredDateOrTime='na' ,DateOfBirth='na' )
+        
+        return 'Please provide valid Appointment date and time and Date of birth '
+    elif preferred_valid == 'not valid':
+        text = " remove preferred date and time for appointment from the context"
+        UserProfile.objects.filter(session_id=session_id).update(PreferredDateOrTime='na'  )
+        return 'Please provide valid Appointment date and time'
+    elif dob_valid == 'not valid':
+        text = "remove date of birth from the context"
+        UserProfile.objects.filter(session_id=session_id).update( DateOfBirth='na' )
+        return 'Please provide valid Date of birth'
+    else:
+        return True
+ 
+
 def verify_tools(request,practice):
     
 
@@ -695,14 +754,16 @@ def handle_user_input(request,user_input,history,practice):
             formatted_input = "User:"
             for chat in chat_history:
                 formatted_input+= f"  {chat.user_input}\n "
-            user_input=formatted_input+user_input
+            user_data = UserProfile.objects.filter(session_id=session_id)
+            # if user_data.exists():
+            #     user_input=formatted_input+user_input
             # tools=[fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
             Tools_names=", ".join([t.name for t in tools])
             tool_description=", ".join([t.description for t in tools])
             tool_args=", ".join([str(t.args) for t in tools])
             result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
-            
-            try:
+            print(result)
+            if True:
                 data = json.loads(request.body.decode('utf-8'))
                 user_input = data.get('input', '')
                 session_id = data.get('session_id', '')
@@ -752,6 +813,21 @@ def handle_user_input(request,user_input,history,practice):
                 else:
                     user_data = UserProfile.objects.filter(session_id=session_id).first()
                     print("rfjksej", user_data)
+
+                    validation=validate_date(session_id,user_data.PreferredDateOrTime,user_data.DateOfBirth)
+                    if validation != True:
+                        return validation
+                    user_data = UserProfile.objects.filter(session_id=session_id).first()
+                    if not validate_phone(user_data.PhoneNumber):
+                        UserProfile.objects.filter(session_id=session_id).update(PhoneNumber='na' )
+                        prompt = f"Please provide a valid Phone Number. The number you provided is not valid."
+                        result=transform_input(prompt)
+                        return result
+                    if not validate_email(user_data.Email):
+                        UserProfile.objects.filter(session_id=session_id).update(Email='na' )
+                        prompt = f"Please provide a valid Email. The email you provided is not valid."
+                        result=transform_input(prompt)
+                        return result
                     confirmation_message = (
                         f"Here are the details of your appointment:\n"
                         f"Date and Time: {user_data.PreferredDateOrTime}\n"
@@ -763,7 +839,7 @@ def handle_user_input(request,user_input,history,practice):
                     )
                     request.session[f"step{session_id}"] = "confirmation"
                     return confirmation_message
-            except:
+            else:
                 
                 return result["output"]
  
@@ -788,7 +864,7 @@ def handle_user_input(request,user_input,history,practice):
             user_data = UserProfile.objects.filter(session_id=session_id).first()
             print("fdvbkxnarmzdf",user_data)
             result = agent_executor.invoke({
-                "input": f"Send OTP to FirstName :{user_data.FirstName},LastName:{user_data.LastName},PhoneNumber: {user_data.PhoneNumber},DOB : {user_data.DateOfBirth},Email: {user_data.Email}",
+                "input": f" Send OTP to FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
                 "tools": [sndotp],
                 "tool_names": "sndotp",
                 "tool_description": sndotp.description,
@@ -811,13 +887,14 @@ def handle_user_input(request,user_input,history,practice):
                 user_data = UserProfile.objects.filter(session_id=session_id).first()
                 print("fdvbkxnarmzdf",user_data)
                 result = agent_executor.invoke({
-                    "input": f"Send OTP to FirstName :{user_data.FirstName},LastName:{user_data.LastName},PhoneNumber: {user_data.PhoneNumber},DOB : {user_data.DateOfBirth},Email: {user_data.Email}",
+                    "input":  f"Send OTP to FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
                     "tools": [sndotp],
                     "tool_names": "sndotp",
                     "tool_description": sndotp.description,
                     "tool_args": json.dumps({"FirstName": user_data.FirstName,"LastName": user_data.LastName,"PhoneNumber": user_data.PhoneNumber,"DOB": user_data.DateOfBirth,"Email": user_data.Email}),                
                     "agent_scratchpad": " "
                     })
+                print(result)
                 request.session[f"step{session_id}"] = "otp_verification"
                 return f"An OTP has been sent to your registered Mobile No. or Email. <br> Please enter the OTP to proceed."
             elif intent.lower().strip()=='incorrect':  
@@ -851,7 +928,7 @@ def handle_user_input(request,user_input,history,practice):
                         user_data=UserProfile.objects.create(session_id=session_id)
                         UserProfile.objects.filter(session_id=session_id).update(**{key:value})
                 request.session[f"step{session_id}"] = "input_new_value"
-                return handle_user_input(request,user_input,history)
+                return handle_user_input(request,user_input,history,practice)
             
   
  
