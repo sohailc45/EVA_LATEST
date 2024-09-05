@@ -845,11 +845,74 @@ def verify_tools(request,practice):
         pass
     return tools
 
-    
 
 
 def handle_user_input(request,user_input,history,practice):
-    
+    prompt = PromptTemplate(
+        template=("""
+                <|begin_of_text|><|start_header_id|>system<|end_header_id|>
+                
+                You are the health care assistent Agent read the user queries and return the response using the tools
+                you do not know any thing  you will use tools for everything. 
+                do not put information like users details and other things if user has not shared it yet.
+                Answer the following questions as best you can. You have access to the following tools:
+                return the answers as soon as you get the answer to the question
+                also keep the chat history in mind 
+                if user ask query related to appointment with greeting like hi..then donot go to greeting response.you have to go fetch info tool for book appointment
+                IF user ask any static informationn like office addres ,timing or related to  organisation then donot use fetch info
+                read the instruction carefully and follow the steps.
+                understand the chat history and see what user wants to do and make the action input accordingly.
+                try 1 iteration only and if result is not found return this text ```Please clarify your query so I can assist you better.```
+                
+                Chat_history: {agent_scratchpad}
+                
+                    
+                        
+                Tools: {tools}
+                Tools_names: {tool_names}
+                Tools_description : {tool_description}
+                Tools_args : {tool_args}
+            
+                Use the following format:
+            
+                Question: the input question you must answer.
+            
+                Thought: you should always think about what to do.
+            
+                Action: the action to take, should be one of [{tool_names}]
+            
+                Action Input: input to the action as a dictionary.
+            
+                Observation: Observe the result of the action.
+                output : Observation.
+            
+                ... (this Thought/Action/Action Input/Observation can repeat only 1 time.)
+            
+                Thought: I now know the final answer
+
+                Final Answer: the final answer to the original input question based on observation
+                terminate the chain
+                Begin!
+
+                Question: {input}
+
+                Thought:{agent_scratchpad}
+                
+                stop the chain after the obsevation
+                <|start_header_id|>user<|end_header_id|>
+                    question: {input}.
+                <|eot_id|><|start_header_id|>assistant<|end_header_id|>
+                
+                <|eot_id|>
+                <|end_of_text|>
+                    """
+                )
+                
+                ,input_variables=["input","tools","tool_names","tool_description",'tool_args','agent_scratchpad'],
+            )
+
+
+
     tools=[fetch_info_to_change,query_chroma_and_generate_response,query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
    
     agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation","short_queries is not a valid tool"])
