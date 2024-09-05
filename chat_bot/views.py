@@ -11,18 +11,25 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langchain import hub
 from langchain.agents import AgentExecutor,  create_react_agent
 from langchain.prompts import PromptTemplate
-# from langchain_groq import ChatGroq
+from langchain_groq import ChatGroq
 from langchain.memory import ConversationBufferMemory
-
+# from langchain.core.messages import HumanMessage, AIMessage
+# from . model_loader import *
 from langchain_community.llms import HuggingFaceTextGenInference
 from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 import time
 from langchain_community.llms import HuggingFaceEndpoint
-
+# Define your custom prompt template
 from chat_bot.models import UserProfile,ChatHistory
 import uuid
 from chat_bot.static_data import *
-
+logfile = "output.log"
+from langchain_core.callbacks import FileCallbackHandler, StdOutCallbackHandler
+from loguru import logger
+ 
+logger.add(logfile, colorize=True, enqueue=True)
+handler_1 = FileCallbackHandler(logfile)
+handler_2 = StdOutCallbackHandler()
 prompt = PromptTemplate(
     template=("""
      <|begin_of_text|><|start_header_id|>system<|end_header_id|>
@@ -42,6 +49,7 @@ prompt = PromptTemplate(
       Chat_history: {agent_scratchpad}
       
          
+              
       Tools: {tools}
       Tools_names: {tool_names}
       Tools_description : {tool_description}
@@ -861,9 +869,12 @@ def handle_user_input(request,user_input,history,practice):
             tool_description=", ".join([t.description for t in tools])
             tool_args=", ".join([str(t.args) for t in tools])
             try:
-                result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
+                result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history}, {"callbacks": [handler_1, handler_2]})
             except:
-                result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history})
+                result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history}, {"callbacks": [handler_1, handler_2]})
+ 
+            print(result)
+            logger.info(result)
 
             print(result)
             try:
@@ -1332,7 +1343,11 @@ def chatbot_view(request):
         try:
             response=handle_user_input(request,user_input,history,practice)
         except:
-            response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
+            try:
+                response=handle_user_input(request,user_input,history,practice)
+            except:
+                response=handle_user_input(request,user_input,history,practice)
+            
         if response=='Agent stopped due to iteration limit or time limit.':
             
             response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
