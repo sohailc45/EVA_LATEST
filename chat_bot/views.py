@@ -849,6 +849,11 @@ def verify_tools(request,practice):
 
 
 def handle_user_input(request,user_input,history,practice):
+    
+    tools=[fetch_info_to_change,query_chroma_and_generate_response,query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
+   
+    agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation","short_queries is not a valid tool"])
+    agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools,verbose=True, handle_parsing_errors=True,max_iterations=6)
     global state
     data = json.loads(request.body.decode('utf-8'))
     user_input = data.get('input', '')
@@ -873,16 +878,16 @@ def handle_user_input(request,user_input,history,practice):
             except:
                 result=agent_executor.invoke({"input": user_input,'tools':tools,"tool_names":Tools_names,"tool_description":tool_description,'tool_args':tool_args,'agent_scratchpad':history}, {"callbacks": [handler_1, handler_2]})
  
-            print(result)
+           
             logger.info(result)
 
-            print(result)
+            
             try:
                 data = json.loads(request.body.decode('utf-8'))
                 user_input = data.get('input', '')
                 session_id = data.get('session_id', '')
                 result_=result['output']
-                print(result_,'result++++++++++++++++++')
+                
                 fields = ['FirstName', 'LastName', 'DateOfBirth', 'PhoneNumber', 'Email', 'PreferredDateOrTime']
                       
                 for key, value in result_.items():
@@ -898,7 +903,7 @@ def handle_user_input(request,user_input,history,practice):
                     except:
                         pass
                 missing_fields = [field for field in fields if not result_.get(field) or result_.get(field).lower() == "none"]
-                print(missing_fields,'missing_fields')
+             
                 missing_fields_=missing_fields
                 missing_fields_=[]
                 for field in missing_fields:
@@ -921,12 +926,12 @@ def handle_user_input(request,user_input,history,practice):
                 missing_fields=missing_fields_
                 if missing_fields:
                     result = f" Please provide these missing fields {', '.join(missing_fields)}: "
-                    print('missing_fields+++')
+                  
                     result=transform_input(result)
                     return result
                 else:
                     user_data = UserProfile.objects.filter(session_id=session_id).first()
-                    print("rfjksej", user_data)
+                
 
                     validation=validate_date(session_id,user_data.PreferredDateOrTime,user_data.DateOfBirth)
                     if validation != True:
@@ -971,12 +976,11 @@ def handle_user_input(request,user_input,history,practice):
             return greeting_response
  
     elif request.session[f"step{session_id}"] == "confirmation":
-        print("gtdkmrkbm",user_input)
-        
+       
         
         if user_input.lower() == "yes":
             user_data = UserProfile.objects.filter(session_id=session_id).first()
-            print("fdvbkxnarmzdf",user_data)
+     
             try:
                 result = agent_executor.invoke({
                     "input": f" Send OTP to  FirstName is {user_data.FirstName} LastName is {user_data.LastName} PhoneNumber is  {user_data.PhoneNumber} DOB is  {user_data.DateOfBirth} Email is {user_data.Email}",
@@ -1019,7 +1023,7 @@ def handle_user_input(request,user_input,history,practice):
                     "tool_args": json.dumps({"FirstName": user_data.FirstName,"LastName": user_data.LastName,"PhoneNumber": user_data.PhoneNumber,"DOB": user_data.DateOfBirth,"Email": user_data.Email}),                
                     "agent_scratchpad": " "
                     })
-                print(result)
+            
                 request.session[f"step{session_id}"] = "otp_verification"
                 return f"An OTP has been sent to your registered Mobile No. or Email. <br> Please enter the OTP to proceed."
             elif intent.lower().strip()=='incorrect':  
@@ -1039,7 +1043,7 @@ def handle_user_input(request,user_input,history,practice):
                 session_id = data.get('session_id', '')
                 result_=result['output']
 
-                print(result_,'result------------',type(result_))
+            
                 fields = ['FirstName', 'LastName', 'DateOfBirth', 'PhoneNumber', 'Email', 'PreferredDateOrTime']
                     
                 for key, value in result_.items():
@@ -1127,7 +1131,7 @@ def handle_user_input(request,user_input,history,practice):
                     "tool_args": {},
                     "agent_scratchpad": history
                 })
-                print(result['output'])
+            
                 locations = result['output']
                 request.session[f"locations{session_id}"] = locations
                 request.session[f"step{session_id}"] = "location_selection"
@@ -1140,7 +1144,7 @@ def handle_user_input(request,user_input,history,practice):
     
     elif request.session[f"step{session_id}"] == "location_selection":
         try:
-            print("location_selection")
+   
             location_data = json.loads(user_input)  
             location_id = int(location_data)
             lovation_available=request.session[f"locations{session_id}"]
@@ -1163,18 +1167,18 @@ def handle_user_input(request,user_input,history,practice):
                     "agent_scratchpad": history
                 })
                 providers = result['output']
-                print("fhdb",providers)
+        
                 
                 # Printing the extracted locations
                 # for provider in providers:
                 #     print(f"provider Name: {provider['Name']}, provider ID: {provider['ProviderId']}")
                    
                 json_output = json.dumps({"output": providers}, indent=4)
-                print("RSG",json_output)
+       
                 request.session[f"step{session_id}"] = "provider_selection"  # Move to the next step
        
                 request.session[f"providers{session_id}"] = providers
-                print(json_output,"fewjwij")
+           
                 return providers
             else:
                 return "Invalid Location ID. Please enter a Location ID from the list provided."
@@ -1186,7 +1190,7 @@ def handle_user_input(request,user_input,history,practice):
     elif request.session[f"step{session_id}"] == "provider_selection":
         try:
             provider_id = int(user_input)
-            print("dfgxg",provider_id)
+      
             text = request.session[f"providers{session_id}"]
 
             # Use regex to find all occurrences of "ID: <number>"
@@ -1199,7 +1203,7 @@ def handle_user_input(request,user_input,history,practice):
             if provider_id in ids:
                 request.session[f"provider_selected{session_id}"] = provider_id
                 location_id = request.session[f"location_selected{session_id}"]
-                print("dtrgdt",location_id)
+     
                 result = agent_executor.invoke({
                     "input": f"Get Appointment Reasons when selected location_id is {location_id} and  selected provider_id is {provider_id} ",
                     "tools": [get_appointment_reasons],
@@ -1210,7 +1214,7 @@ def handle_user_input(request,user_input,history,practice):
                     "agent_scratchpad": history
                 })
                 appointment_reasons = result['output']
-                print("fhdb", appointment_reasons)
+         
  
                 # Print the extracted appointment reasons
                 # reason_list = "\n".join(f"Reason ID: {reason['ReasonId']}, Reason: {reason['Reason']}" for reason in appointment_reasons)
@@ -1265,7 +1269,6 @@ def handle_user_input(request,user_input,history,practice):
                 PhoneNumber=user_data.PhoneNumber
                 Email=user_data.Email
                 preferred_date_time=user_data.PreferredDateOrTime
-                print("ETZfgsz")
                 appointment_reason_id = request.session[f"appointment_reason_selected{session_id}"]
                 booking_response=''
                 # Use the tool to book the appointment
