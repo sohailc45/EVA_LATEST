@@ -148,14 +148,17 @@ def format_appointment_date(date):
             Instructions:
                 -current date is : {current_date} 
                 -day today is : {day}
-            calculate the date according to users querry: {date}
-            change the date in this format:"%m/%d/%Y" or  "month/day/year" 
-            and return date in mm/dd/yyyy format only
-            example: mm/dd/yyyy
-            please provide only response
+                -user text : {date}
+            calculate the date according to users query if user says something like  next monday or upcomming wednesday etc.
+            change the date in this format:"%m/%d/%Y" .
+            and return date in 'mm/dd/yyyy' format only .
+            return the date only.
+            example: mm/dd/yyyy.
+            please provide only response.
             <|eot_id|>
             <|start_header_id|>user<|end_header_id|>
             {date}<|eot_id|><|start_header_id|>assistant<|end_header_id|>
+
             """
     response = call_huggingface_endpoint(model_prompt_for_appointment, api_url, 256 ,False  ,0.9 ,0.9)
     response_content = response[len(model_prompt_for_appointment):].strip()
@@ -345,11 +348,11 @@ def fetch_info(response):
         -Understand the user input carefully and extract anything you can for these fields (FirstName, LastName, DateOfBirth, Email, PhoneNumber and PreferredDateOrTime) from the user querry.
         -Do not change email and Phone no if they are incorrect Keep them as it is.
         -please extract that name whose appointment to be booked as parents can book the appointment of child so extract child name not parents names if condition arises
-        -understand user query carefully and 
+        -understand user query carefully  
  
         <|eot_id|>
         <|start_header_id|>user<|end_header_id|>
-
+          {response}
         <|eot_id|><|start_header_id|>assistant<|end_header_id|>
         """
     try:
@@ -691,8 +694,8 @@ def book_appointment(data):
     PhoneNumber = data.get("PhoneNumber")
     Email = data.get("Email")
     book_appointment_url = "https://iochatbot.maximeyes.com/api/appointment/onlinescheduling"
-    from_date=format_appointment_date(from_date)
-    DOB=format_appointment_date(DOB)
+    # from_date=format_appointment_date(from_date)
+    # DOB=format_appointment_date(DOB)
     
     # Convert ApptDate to 'MM/DD/YYYY' format
      
@@ -703,14 +706,14 @@ def book_appointment(data):
     # appointment_date = parsed_date.strftime("%m/%d/%Y")
     # print(appointment_date)
     book_appointment_payload = {
-        "OpenSlotId": open_slot_id,
-        "ApptDate": from_date,
-        "ReasonId": reason_id,
-        "FirstName": FirstName,
-        "LastName": LastName,
-        "PatientDob": DOB,
-        "MobileNumber": PhoneNumber,
-        "EmailId": Email}
+        "OpenSlotId": str(open_slot_id),
+        "ApptDate": str(from_date),
+        "ReasonId": str(reason_id),
+        "FirstName": str(FirstName),
+        "LastName": str(LastName),
+        "PatientDob": str(DOB),
+        "MobileNumber": str(PhoneNumber),
+        "EmailId": str(Email)}
     print("dnakjik",book_appointment_payload)
 
     try:
@@ -754,8 +757,8 @@ tools=[fetch_info_to_change,query_chroma_and_generate_response,query_chroma_and_
 memory = ConversationBufferMemory(memory_key="chat_history")
 
 # define the agent
-agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation","short_queries is not a valid tool"])
-agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools,verbose=True, handle_parsing_errors=True,max_iterations=6)
+# agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation","short_queries is not a valid tool"])
+# agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools,verbose=True, handle_parsing_errors=True,max_iterations=6)
 
 state = {
     "step": "start",
@@ -845,6 +848,47 @@ def verify_tools(request,practice):
         pass
     return tools
 
+def end_chat(session_id,request):
+
+    try:
+        del request.session[f"step{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"location_selected{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"locations{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"provider_selected{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"providers{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"appointment_reason_selected{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"appointment_reasons{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"open_slots{session_id}"]
+    except:
+        pass
+    try:
+        del request.session[f"open_slot_selected{session_id}"]
+    except:
+        pass
+
+
+    return 'Done'
 
 
 def handle_user_input(request,user_input,history,practice):
@@ -965,6 +1009,10 @@ def handle_user_input(request,user_input,history,practice):
                             UserProfile.objects.filter(session_id=session_id).update(**{key:value})
                     except:
                         pass
+                tool_used='fetch_info'
+            except:
+                tool_used='not fetch_info'
+            if tool_used=="fetch_info":
                 missing_fields = [field for field in fields if not result_.get(field) or result_.get(field).lower() == "none"]
              
                 missing_fields_=missing_fields
@@ -1021,7 +1069,7 @@ def handle_user_input(request,user_input,history,practice):
                     )
                     request.session[f"step{session_id}"] = "confirmation"
                     return confirmation_message
-            except:
+            else:
                 
                 return result["output"]
  
@@ -1064,7 +1112,7 @@ def handle_user_input(request,user_input,history,practice):
                     })
 
             request.session[f"step{session_id}"] = "otp_verification"
-            result="An OTP has been sent to your registered Mobile No. or Email. <br> Please enter the OTP to proceed."
+            result=" Please enter the OTP to proceed."
             result=transform_input(result)
             return result
  
@@ -1088,7 +1136,7 @@ def handle_user_input(request,user_input,history,practice):
                     })
             
                 request.session[f"step{session_id}"] = "otp_verification"
-                return f"An OTP has been sent to your registered Mobile No. or Email. <br> Please enter the OTP to proceed."
+                return f" Please enter the OTP to proceed."
             elif intent.lower().strip()=='incorrect':  
                 result="What would you like to edit?(FirstName, LastName, DateOfBirth, PhoneNumber, Email, or PreferredDateOrTime)."
                 result=transform_input(result) 
@@ -1345,11 +1393,15 @@ def handle_user_input(request,user_input,history,practice):
                 })
                 
                 booking_response = booking_result['output']
-                del request.session[f"step{session_id}"]
-                data=ChatHistory.objects.filter(session_id=session_id)
-                data.delete()
-                data=UserProfile.objects.filter(session_id=session_id)
-                data.delete()
+                
+                restult=end_chat(session_id,request)
+                print(restult)
+                # data=ChatHistory.objects.filter(session_id=session_id)
+                # data.delete()
+                # data=UserProfile.objects.filter(session_id=session_id)
+                # data.delete()
+
+
                 # request.session[f"step{session_id}"] = "start"
                 # request.session[f"location_selected{session_id}"] = None
                 # request.session[f"provider_selected{session_id}"] = None
@@ -1406,17 +1458,18 @@ def chatbot_view(request):
         
         print(user_input,'history')
 
-        try:
+        if True:
             response=handle_user_input(request,user_input,history,practice)
-        except:
+        else:
             try:
                 response=handle_user_input(request,user_input,history,practice)
             except:
                 response=handle_user_input(request,user_input,history,practice)
             
         if response=='Agent stopped due to iteration limit or time limit.':
-            
-            response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
+            response=handle_user_input(request,user_input,history,practice)
+            if response=='Agent stopped due to iteration limit or time limit.':
+                response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
 
         ChatHistory.objects.create(
             session_id=session_id,
