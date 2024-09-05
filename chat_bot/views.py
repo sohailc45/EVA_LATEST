@@ -1458,9 +1458,9 @@ def chatbot_view(request):
         
         print(user_input,'history')
 
-        if True:
+        try:
             response=handle_user_input(request,user_input,history,practice)
-        else:
+        except:
             try:
                 response=handle_user_input(request,user_input,history,practice)
             except:
