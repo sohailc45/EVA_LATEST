@@ -26,6 +26,7 @@ from chat_bot.static_data import *
 logfile = "output.log"
 from langchain_core.callbacks import FileCallbackHandler, StdOutCallbackHandler
 from loguru import logger
+from django.http import HttpResponse
  
 logger.add(logfile, colorize=True, enqueue=True)
 handler_1 = FileCallbackHandler(logfile)
@@ -99,7 +100,7 @@ prompt = PromptTemplate(
 llm = HuggingFaceEndpoint(
     repo_id="https://j1t7my9b1s4ixuzt.us-east-1.aws.endpoints.huggingface.cloud",  huggingfacehub_api_token="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"
 )
-
+1
 api_url = "https://j1t7my9b1s4ixuzt.us-east-1.aws.endpoints.huggingface.cloud"
 headers = {
     "Authorization": "Bearer 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",  
@@ -956,15 +957,17 @@ def handle_user_input(request,user_input,history,practice):
             )
 
 
-
     tools=[fetch_info_to_change,query_chroma_and_generate_response,query_chroma_and_generate_response_2nd,fetch_info,get_locations,get_providers,get_appointment_reasons,get_open_slots,sndotp,book_appointment,get_greeting_response,generate_response]
    
     agent = create_react_agent(llm, tools, prompt,stop_sequence=["Final Answer","Observation","short_queries is not a valid tool"])
     agent_executor = AgentExecutor.from_agent_and_tools(agent=agent, tools=tools,verbose=True, handle_parsing_errors=True,max_iterations=6)
     global state
+    
     data = json.loads(request.body.decode('utf-8'))
     user_input = data.get('input', '')
     session_id = data.get('session_id', '')
+    request.session[f"step{session_id}"]=UserProfile.objects.get(session_id=session_id).state
+    print(request.session[f"step{session_id}"],'selected state -----',session_id)
     if request.session[f"step{session_id}"] == "start":
         if user_input:
             tools=verify_tools(request,practice)
@@ -1245,6 +1248,7 @@ def handle_user_input(request,user_input,history,practice):
             
                 locations = result['output']
                 request.session[f"locations{session_id}"] = locations
+                UserProfile.objects.filter(session_id=session_id).update(locations=locations)
                 request.session[f"step{session_id}"] = "location_selection"
                 return locations
                
@@ -1254,21 +1258,24 @@ def handle_user_input(request,user_input,history,practice):
             return f"Failed to validate OTP. Status code: {validate_otp_response.status_code}"
     
     elif request.session[f"step{session_id}"] == "location_selection":
+        
         try:
-   
+            print('location_selection----')
             location_data = json.loads(user_input)  
+            print(location_data,'location_data')
             location_id = int(location_data)
-            lovation_available=request.session[f"locations{session_id}"]
+            lovation_available=UserProfile.objects.get(session_id=session_id).locations
             text = lovation_available
-
+            print(lovation_available,'lovation_available')
             # Use regex to find all occurrences of "ID: <number>"
             ids = re.findall(r'ID:\s*(\d+)', text)
             ids=[x.strip() for x in ids]
             # Convert the extracted IDs to integers
             ids = list(map(int, ids))
-        
+            print(ids,'---',location_id)
             if location_id in ids:
                 request.session[f"location_selected{session_id}"] = location_id
+                UserProfile.objects.filter(session_id=session_id).update(location_selected=location_id)
                 result = agent_executor.invoke({
                     "input": f"Get Providers for location_id is {location_id}",
                     "tools": [get_providers],
@@ -1289,7 +1296,7 @@ def handle_user_input(request,user_input,history,practice):
                 request.session[f"step{session_id}"] = "provider_selection"  # Move to the next step
        
                 request.session[f"providers{session_id}"] = providers
-           
+                UserProfile.objects.filter(session_id=session_id).update(providers=providers)
                 return providers
             else:
                 return "Invalid Location ID. Please enter a Location ID from the list provided."
@@ -1302,19 +1309,20 @@ def handle_user_input(request,user_input,history,practice):
         try:
             provider_id = int(user_input)
       
-            text = request.session[f"providers{session_id}"]
-
+            text = UserProfile.objects.get(session_id=session_id).providers
+            print(provider_id,'text===')
             # Use regex to find all occurrences of "ID: <number>"
             ids = re.findall(r'ID:\s*(\d+)', text)
             
             ids=[x.strip() for x in ids]
             # Convert the extracted IDs to integers
             ids = list(map(int, ids))
- 
+            print()
             if provider_id in ids:
                 request.session[f"provider_selected{session_id}"] = provider_id
-                location_id = request.session[f"location_selected{session_id}"]
-     
+                UserProfile.objects.filter(session_id=session_id).update(provider_selected=provider_id) 
+                location_id = UserProfile.objects.get(session_id=session_id).location_selected
+                print(location_id)
                 result = agent_executor.invoke({
                     "input": f"Get Appointment Reasons when selected location_id is {location_id} and  selected provider_id is {provider_id} ",
                     "tools": [get_appointment_reasons],
@@ -1331,6 +1339,7 @@ def handle_user_input(request,user_input,history,practice):
                 # reason_list = "\n".join(f"Reason ID: {reason['ReasonId']}, Reason: {reason['Reason']}" for reason in appointment_reasons)
                 request.session[f"step{session_id}"] = "appointment_reason_selection"
                 request.session[f"appointment_reasons{session_id}"] = appointment_reasons
+                UserProfile.objects.filter(session_id=session_id).update(appointment_reasons=appointment_reasons)
                 return appointment_reasons
  
             else:
@@ -1343,8 +1352,9 @@ def handle_user_input(request,user_input,history,practice):
         try:
             appointment_reason_id = int(user_input)
             request.session[f"appointment_reason_selected{session_id}"] = appointment_reason_id
-            location_id = request.session[f"location_selected{session_id}"]
-            provider_id = request.session[f"provider_selected{session_id}"]
+            UserProfile.objects.filter(session_id=session_id).update(appointment_reason_selection=appointment_reason_id) 
+            location_id = UserProfile.objects.get(session_id=session_id).location_selected
+            provider_id = UserProfile.objects.get(session_id=session_id).provider_selected
             user_data = UserProfile.objects.filter(session_id=session_id).first()
             preferred_date_time=user_data.PreferredDateOrTime
             result = agent_executor.invoke({
@@ -1367,12 +1377,12 @@ def handle_user_input(request,user_input,history,practice):
             return "Invalid appointment reason ID. Please enter a valid ID."
  
     elif request.session[f"step{session_id}"] == "slot_selection":
-        # try:
+        try:
                 open_slot_id = user_input
             # if any(slot['OpenSlotId'] == open_slot_id for slot in request.session[f"open_slots"]):
                 request.session[f"open_slot_selected{session_id}"] = open_slot_id
-                location_id = request.session[f"location_selected{session_id}"]
-                provider_id = request.session[f"provider_selected{session_id}"]
+                location_id = UserProfile.objects.get(session_id=session_id).location_selected
+                provider_id = UserProfile.objects.get(session_id=session_id).provider_selected
                 user_data = UserProfile.objects.filter(session_id=session_id).first()
                 first_name=user_data.FirstName
                 last_name=user_data.LastName
@@ -1380,7 +1390,7 @@ def handle_user_input(request,user_input,history,practice):
                 PhoneNumber=user_data.PhoneNumber
                 Email=user_data.Email
                 preferred_date_time=user_data.PreferredDateOrTime
-                appointment_reason_id = request.session[f"appointment_reason_selected{session_id}"]
+                appointment_reason_id = UserProfile.objects.get(session_id=session_id).appointment_reason_selection
                 booking_response=''
                 # Use the tool to book the appointment
                 booking_result = agent_executor.invoke({
@@ -1394,29 +1404,28 @@ def handle_user_input(request,user_input,history,practice):
                 
                 booking_response = booking_result['output']
                 
-                restult=end_chat(session_id,request)
-                print(restult)
+
+
+                # restult=end_chat(session_id,request)
+                # print(restult)
                 # data=ChatHistory.objects.filter(session_id=session_id)
                 # data.delete()
                 # data=UserProfile.objects.filter(session_id=session_id)
                 # data.delete()
 
 
-                # request.session[f"step{session_id}"] = "start"
-                # request.session[f"location_selected{session_id}"] = None
-                # request.session[f"provider_selected{session_id}"] = None
-                # request.session[f"appointment_reason_selected{session_id}"] = None
-                # request.session[f"open_slot_selected{session_id}"] = None
-               
+                request.session[f"step{session_id}"] = "start"
+                
+                return booking_response
                 # if booking_response.get("Status") == "Success":
                     # return f"Your appointment has been booked successfully. Appointment ID: {booking_response['AppointmentId']}"
         #         else:
         #             return "Failed to book the appointment. Please try again."
         #     else:
         #         return "Invalid slot ID. Please enter a valid ID from the list provided."
-        # except ValueError:
-        #     return "Invalid input. Please enter a numerical ID from the list provided."
-                return booking_response
+        except ValueError:
+            return "Invalid input. Please enter a numerical ID from the list provided."
+                
 
 
 def get_chat_history( session_id):
@@ -1431,6 +1440,14 @@ def home(request):
     request.session[f'session_id1'] = str(uuid.uuid4())
     session_id=request.session[f'session_id1'] 
     return render(request, "home.html",{'session_id':session_id})
+def home_practice(request,id):
+    print(type(id))
+    request.session[f'session_id1'] = str(uuid.uuid4())
+    session_id=request.session[f'session_id1'] 
+    available_practices=[1,2]
+    if id not in available_practices:
+        return HttpResponse(f"The Practice {id} is not available")
+    return render(request, "home_practice.html",{'session_id':session_id,'practice_id':id})
 def home_dynamic(request):
     request.session[f'session_id1'] = str(uuid.uuid4())
     session_id=request.session[f'session_id1'] 
@@ -1454,10 +1471,12 @@ def chatbot_view(request):
             print('excepting')
             request.session[f"step{session_id}"]='start'
         history=get_chat_history( session_id)
-        print(history)
-        
-        print(user_input,'history')
 
+        
+        user=UserProfile.objects.filter(session_id=session_id)  
+        if not user:
+           UserProfile.objects.create(session_id=session_id)
+           print('user_create',session_id) 
         try:
             response=handle_user_input(request,user_input,history,practice)
         except:
@@ -1465,11 +1484,14 @@ def chatbot_view(request):
                 response=handle_user_input(request,user_input,history,practice)
             except:
                 response=handle_user_input(request,user_input,history,practice)
-            
+        
+        
+
         if response=='Agent stopped due to iteration limit or time limit.':
             response=handle_user_input(request,user_input,history,practice)
             if response=='Agent stopped due to iteration limit or time limit.':
                 response="I'm sorry, I didn't understand that. <br> Please clarify your query so I can assist you better."
+        UserProfile.objects.filter(session_id=session_id).update(state=request.session[f"step{session_id}"])
 
         ChatHistory.objects.create(
             session_id=session_id,
