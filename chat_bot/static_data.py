@@ -5,12 +5,12 @@ from langchain_community.vectorstores import Chroma
 
 persist_directory =  'chroma_db_files/'
 # Create or get the collection
-collection_name = "practice_info2"
+collection_name = "practice2"
  
 emb_model = "sentence-transformers/paraphrase-MiniLM-L3-v2"
 embeddings = HuggingFaceEmbeddings(model_name=emb_model)
 # Practice information as key-value pairs
-practice_info = {
+practice1 = {
     "Practice Name": "Rose City Eye Care",
     "Practice Hours": "8 AM to 8 PM PST",
     "Practice Email": "RoseCity@gmail.com",
@@ -38,7 +38,7 @@ practice_info = {
     "Wait List": "Yes, but there is no guarantee if you get an appointment or not."
 }
  
-practice_info2={
+practice2={
   "Practice Name": "First Insight Vision",
   "Practice Hours": "9 AM to 4 PM PST",
   "Practice Email": "eyecare@gmail.com",
@@ -105,10 +105,10 @@ practice_info2={
   "Wait List": "No"
 }
  
-def vectorDB(subject, practice_info2):
+def vectorDB(subject, practice2):
     db = Chroma.from_texts(
         collection_name=f"{subject}",
-        texts=[f"{key}: {value}" for key, value in practice_info2.items()],
+        texts=[f"{key}: {value}" for key, value in practice2.items()],
         embedding=embeddings,
         persist_directory=persist_directory
     )
@@ -123,13 +123,13 @@ def connect_to_vectorDB(subject):
         return vector_db
     except Exception as e:
         print(f"Error occurred: {e}")
-def save_practise_to_vectorDB(subject="practice_info2"):
-    vector_db = vectorDB(subject, practice_info2)
+def save_practise_to_vectorDB(subject="practice2"):
+    vector_db = vectorDB(subject, practice2)
     if vector_db:
         print("Practice information added successfully.")
  
  
-def query_chroma_and_generate_response(query, subject="practice_info2"):
+def query_chroma_and_generate_response(query, subject="practice2"):
     vector_db = connect_to_vectorDB(subject)
     if vector_db:
         results = vector_db.similarity_search(query, k=1)
