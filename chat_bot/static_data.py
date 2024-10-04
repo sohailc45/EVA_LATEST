@@ -3,7 +3,8 @@ import chromadb
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 
-persist_directory =  'chroma_db_files/'
+# persist_directory =  'chroma_db_files/'
+persist_directory =  "C:\\Users\\Sohail_C\\Desktop\\First-insight\\Common_DB"
 # Create or get the collection
 collection_name = "practice2"
  
@@ -105,6 +106,7 @@ practice2={
   "Wait List": "No"
 }
  
+
 def vectorDB(subject, practice2):
     db = Chroma.from_texts(
         collection_name=f"{subject}",
